@@ -69,8 +69,12 @@ PPU_STATUS = $2002
 ; OAM address ($2003) > write / OAM data ($2004) > write
 ; Set the "sprite" address using OAMADDR ($2003)
 ; Then write the following bytes via OAMDATA ($2004)
+OAM_ADDR  = $2003
+OAM_DATA	= $2004
+OAM_DMA   = $4014
 
 ; - Byte 0 (Y Position)
+OAM_Y    = 0
 
 ; - Byte 1 (Tile Index)
 ;
@@ -78,6 +82,7 @@ PPU_STATUS = $2002
 ; ||||||||
 ; |||||||+- Bank ($0000 or $1000) of tiles
 ; +++++++-- Tile number of top of sprite (0 to 254; bottom half gets the next tile)
+OAM_TILE = 1
 
 ; - Byte 2 (Attributes)
 ;
@@ -88,12 +93,10 @@ PPU_STATUS = $2002
 ; ||+------ Priority (0: in front of background; 1: behind background)
 ; |+------- Flip sprite horizontally
 ; +-------- Flip sprite vertically
+OAM_ATTR = 2
 
 ; - Byte 3 (X Position)
-
-OAM_ADDR  = $2003
-OAM_DATA	= $2004
-OAM_DMA   = $4014
+OAM_X    = 3
 
 ; Scroll ($2005) >> write x2
 ; http://wiki.nesdev.com/w/index.php/The_skinny_on_NES_scrolling#2006-2005-2005-2006_example

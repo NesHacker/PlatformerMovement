@@ -154,51 +154,16 @@ loop:
   rti
 .endproc
 
-.scope WalkAnimation
-  TIMER = $40
-  DURATION = 8
-
-  .proc init
-    lda #DURATION
-    sta TIMER
-    rts
-  .endproc
-
-  .proc run
-    dec TIMER
-    beq @next_frame
-    rts
-  @next_frame:
-    ldx #DURATION
-    stx TIMER
-    lda $0200 + 1
-    cmp #$80
-    beq @frame2
-  @frame1:
-    lda #$80
-    sta $0200 + 1
-    lda #$82
-    sta $0204 + 1
-    rts
-  @frame2:
-    lda #$84
-    sta $0200 + 1
-    lda #$86
-    sta $0204 + 1
-    rts
-  .endproc
-.endscope
-
 ;-------------------------------------------------------------------------------
 ; Initializes the game on reset before the main loop begins to run
 ;-------------------------------------------------------------------------------
 .proc init_game
+  ; Initialize the game state
   jsr init_palettes
   jsr init_sprites
   jsr init_nametable
 
-  jsr WalkAnimation::init
-
+  ; Enable rendering and NMI
   lda #%10100000
   sta PPU_CTRL
   lda #%00011110
@@ -272,35 +237,214 @@ data:
 ; Main game loop logic that runs every tick
 ;-------------------------------------------------------------------------------
 
-TARGET_VELOCITY   = $30
-VELOCITY          = $31
-POSITION_X        = $32
-POSITION_X_SPRITE = $34
-
+TARGET_VELOCITY           = $30 ; Signed Fixed Point 4.4
+VELOCITY                  = $31 ; Signed Fixed Point 4.4
+POSITION_X                = $32 ; Signed Fixed Point 12.4
+POSITION_X_SPRITE         = $34 ; Unsigned Screen Coordinates
 HEADING                   = $35 ; 0 = Right, 1 = Left
-ANIMATION_INDEX           = $36
+ANIMATION_FRAME           = $36
 ANIMATION_TIMER           = $37
-ANIMATION_FRAME_DURATION  = $38
+ANIMATION_MOTION_STATE    = $38 ; 0 = Still, 1 = Walk/Run, 2 = Pivot
 
-
-
+.enum MotionState
+  Still = 0
+  Walk  = 1
+  Pivot = 2
+.endenum
 
 .proc game_loop
+  ; 1) Read the joypad and update the controller state
   jsr read_joypad1
-  ;jsr WalkAnimation::run
 
-  ; Horizontal Movement
-  jsr set_target_velocity
-  jsr accelerate
-  jsr apply_velocity
-  jsr bound_position
-  jsr set_player_sprite_position
+  ; 2) Update player movement state based on controller input
+  jsr update_player_movement
 
-
+  ; 3) Update player sprite based on movement state
+  jsr update_player_sprite
 
   rts
 .endproc
 
+.proc update_player_movement
+  jsr set_target_velocity
+  jsr accelerate
+  jsr apply_velocity
+  jsr bound_position
+  rts
+.endproc
+
+.proc update_player_sprite
+  jsr update_motion_state
+  jsr update_animation_frame
+  jsr update_heading
+  jsr update_sprite_tiles
+  jsr update_sprite_position
+  rts
+.endproc
+
+.proc update_sprite_tiles
+  ldx HEADING
+  lda ANIMATION_MOTION_STATE
+  cmp #MotionState::Pivot
+  beq @pivot
+  cmp #MotionState::Walk
+  beq @walk
+@still:
+  lda walk_tiles, x
+  sta $200 + OAM_TILE
+  lda walk_tiles +2, x
+  sta $204 + OAM_TILE
+  rts
+@walk:
+  lda ANIMATION_FRAME
+  asl
+  asl
+  clc
+  adc HEADING
+  tax
+  lda walk_tiles, x
+  sta $200 + OAM_TILE
+  lda walk_tiles +2, x
+  sta $204 + OAM_TILE
+  rts
+@pivot:
+
+  lda pivot_tiles, x
+  sta $200 + OAM_TILE
+  lda pivot_tiles + 2, x
+  sta $204 + OAM_TILE
+  rts
+pivot_tiles:
+  .byte $98, $9A, $9A, $98 ; Pivot is the same no matter the animation frame
+walk_tiles:
+  .byte $80, $82, $82, $80 ; Frame 1
+  .byte $84, $86, $86, $84 ; Frame 2
+.endproc
+
+.proc update_sprite_position
+  ; This is computed in `bound_position` above, so all we have to do is set the
+  ; sprite X coordinates appropriately.
+  lda POSITION_X_SPRITE
+  sta $200 + 3
+  clc
+  adc #8
+  sta $0204 + 3
+  rts
+.endproc
+
+.proc update_animation_frame
+  ; If V == 0:
+  ;   Set initial timer
+  ; Else:
+  ;   Decrement timer
+  ;   If frame timer == 0:
+  ;     Reset frame timer based on V
+  ;     Increment the frame
+  lda VELOCITY
+  bne @moving
+  lda delay_by_velocity
+  sta ANIMATION_TIMER
+  rts
+@moving:
+  dec ANIMATION_TIMER
+  beq @next_frame
+  rts
+@next_frame:
+  ldx VELOCITY
+  bpl @transition_state
+  lda #0
+  sec
+  sbc VELOCITY
+  tax
+@transition_state:
+  lda delay_by_velocity, x
+  sta ANIMATION_TIMER
+  lda #1
+  eor ANIMATION_FRAME
+  sta ANIMATION_FRAME
+  rts
+delay_by_velocity:
+  .byte 12, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10
+  .byte 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7
+  .byte 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4
+.endproc
+
+.proc update_motion_state
+  ; If T = V:
+  ;   // Steady motion
+  ;   If T == 0: STILL
+  ;   Else: WALK
+  ; If T <> V:
+  ;   // Accelerating
+  ;   If <- or -> being pressed:
+  ;     If T > 0 && V < 0: PIVOT
+  ;     If T < 0 && V > 0: PIVOT
+  ;   Else: WALK
+  lda TARGET_VELOCITY
+  cmp VELOCITY
+  bne @accelerating
+@steady:
+  lda VELOCITY
+  beq @still
+  bne @walk
+@still:
+  lda #MotionState::Still
+  sta ANIMATION_MOTION_STATE
+  rts
+@accelerating:
+  lda #BUTTON_LEFT
+  ora #BUTTON_RIGHT
+  and JOYPAD_DOWN
+  beq @walk
+  lda #%10000000
+  and TARGET_VELOCITY
+  sta $00
+  lda #%10000000
+  and VELOCITY
+  cmp $00
+  beq @walk
+@pivot:
+  lda #MotionState::Pivot
+  sta ANIMATION_MOTION_STATE
+  rts
+@walk:
+  lda #MotionState::Walk
+  sta ANIMATION_MOTION_STATE
+  rts
+.endproc
+
+.proc update_heading
+  ; If the target velocity is 0 then the player isn't pressing left or right and
+  ; the heading doesn't need to change.
+  lda TARGET_VELOCITY
+  bne @check_heading
+  rts
+  ; If the target velocity is non-zero, check to see if player is heading in the
+  ; desired direction.
+@check_heading:
+  asl
+  lda #0
+  rol
+  cmp HEADING
+  bne @update_heading
+  rts
+@update_heading:
+  ; If the desired heading is not equal to the current heading based on the
+  ; target velocity, then update the heading.
+  sta HEADING
+  ; Toggle the "horizontal" mirroring on the character sprites
+  lda #%01000000
+  eor $200 + OAM_ATTR
+  sta $200 + OAM_ATTR
+  sta $204 + OAM_ATTR
+  rts
+.endproc
+
+
+
+;-------------------------------------------------------------------------------
+; Horizontal Movement and Controls
+;-------------------------------------------------------------------------------
 .proc apply_velocity
   ; Check to see if we're moving to the right (positive) or the left (negative)
   lda VELOCITY
@@ -388,17 +532,6 @@ ANIMATION_FRAME_DURATION  = $38
   rts
 .endproc
 
-.proc set_player_sprite_position
-  ; This is computed in `bound_position` above, so all we have to do is set the
-  ; sprite X coordinates appropriately.
-  lda POSITION_X_SPRITE
-  sta $200 + 3
-  clc
-  adc #8
-  sta $0204 + 3
-  rts
-.endproc
-
 .proc set_target_velocity
   ; Check if the B button is being pressed and save the state in the X register
   ldx #0
@@ -460,7 +593,7 @@ left_velocity:
   bne @check_greater
   rts
 @check_greater:
-  bmi @lesser:
+  bmi @lesser
   dec VELOCITY
   rts
 @lesser:
