@@ -5,16 +5,13 @@
 ; System Memory Map
 ;-------------------------------------------------------------------------------
 ; $00-$1F:    Subroutine Scratch Memory
-;             Volatile Memory used for
+;             Volatile Memory used for parameters, return values, and temporary
+;             / scratch data.
 ;-------------------------------------------------------------------------------
-; $20-$7F:    Game State
+; $20-$FF:    Game State
 ;             Region of memory used to hold game state on the zero page. Since
 ;             zero page memory access is faster than absolute addressing store
 ;             values that are frequently read/written here.
-;-------------------------------------------------------------------------------
-; $80-$FF:    Render State
-;             Fast access zero page memory used for rendering state and updates.
-;             This includes things like animation timers, nametable data, etc.
 ;-------------------------------------------------------------------------------
 ; $100-$1FF:  The Stack
 ;             Region of memory set aside for the system stack.
@@ -164,7 +161,7 @@ loop:
   jsr init_nametable
 
   ; Enable rendering and NMI
-  lda #%10100000
+  lda #%10110000
   sta PPU_CTRL
   lda #%00011110
   sta PPU_MASK
@@ -207,31 +204,88 @@ palettes:
   bne @loop
   rts
 data:
-  .byte 135, $80, %00000000, 120
-  .byte 135, $82, %00000000, 128
+  .byte 143, $80, %00000000, 120
+  .byte 143, $82, %00000000, 128
 .endproc
 
-
 .proc init_nametable
-  ; TODO Clean this up and factor drawing out in to generator routines...
-  bit PPU_STATUS
-  VramColRow 0, 19, NAMETABLE_A
-  ldx #$20
+  ; Draw the ground platform
+  VramColRow 0, 20, NAMETABLE_A
+  lda #$04
+  jsr ppu_full_line
+  lda #$05
+  jsr ppu_full_line
   lda #$06
-: sta PPU_DATA
-  dex
-  bne :-
-  ldy #10
-: ldx #$20
-  lda #$08
-: sta PPU_DATA
-  dex
-  bne :-
-  dey
-  bne :--
+  jsr ppu_full_line
+
+  ; Draw the press button indicators
+  VramColRow 2, 24, NAMETABLE_A
+  ldy #$20
+  ldx #$7
+  jsr ppu_fill_and_increment
+  VramColRow 2, 25, NAMETABLE_A
+  lda #$29
+  ldx #6
+  jsr ppu_fill_line
+  lda #$26
+  sta PPU_DATA
+  VramColRow 2, 26, NAMETABLE_A
+  lda #$27
+  ldx #6
+  jsr ppu_fill_line
+  lda #$28
+  sta PPU_DATA
+
+  ; Draw the horizontal velocity indicator
+  VramColRow 1, 27, NAMETABLE_A
+  lda #$30
+  sta PPU_DATA
+  lda #$31
+  sta PPU_DATA
+  sta PPU_DATA
+  sta PPU_DATA
+  lda #$34
+  sta PPU_DATA
+  sta PPU_DATA
+  sta PPU_DATA
+  lda #$35
+  sta PPU_DATA
+
   VramReset
   rts
 .endproc
+
+.proc ppu_full_line
+  ; Fills a full line of 32 tiles with the value in `A`.
+  ldx #32
+  jsr ppu_fill_line
+  rts
+.endproc
+
+.proc ppu_fill_line
+  ; Writes `A` into VRAM `X` times.
+@loop:
+  sta PPU_DATA
+  dex
+  bne @loop
+  rts
+.endproc
+
+.proc ppu_fill_and_increment
+  ; Writes the value `Y` into VRAM `X` times, incrementing `Y` after each write.
+  ; Useful if you have background tiles laid out linearly in the pattern table.
+@loop:
+  tya
+  iny
+  sta PPU_DATA
+  dex
+  bne @loop
+  rts
+.endproc
+
+
+
+
 
 ;-------------------------------------------------------------------------------
 ; Main game loop logic that runs every tick
@@ -439,8 +493,6 @@ delay_by_velocity:
   sta $204 + OAM_ATTR
   rts
 .endproc
-
-
 
 ;-------------------------------------------------------------------------------
 ; Horizontal Movement and Controls
