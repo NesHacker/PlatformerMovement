@@ -194,3 +194,31 @@ PALETTE     = $3f00
 : bit PPU_STATUS
   bpl :-
 .endmacro
+
+.proc ppu_full_line
+  ; Fills a full line of 32 tiles with the value in `A`.
+  ldx #32
+  jsr ppu_fill_line
+  rts
+.endproc
+
+.proc ppu_fill_line
+  ; Writes `A` into VRAM `X` times.
+@loop:
+  sta PPU_DATA
+  dex
+  bne @loop
+  rts
+.endproc
+
+.proc ppu_fill_and_increment
+  ; Writes the value `Y` into VRAM `X` times, incrementing `Y` after each write.
+  ; Useful if you have background tiles laid out linearly in the pattern table.
+@loop:
+  tya
+  iny
+  sta PPU_DATA
+  dex
+  bne @loop
+  rts
+.endproc

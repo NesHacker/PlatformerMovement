@@ -6,7 +6,7 @@
 ; demo only uses the first controller (JOYPAD_1).
 ;
 ; The bits in each mask are mapped as such:
-;  
+;
 ; [AB-+^.<>]
 ;  ||||||||
 ;  |||||||+--------> Bit 0: D-PAD Right
@@ -37,22 +37,25 @@ BUTTON_DOWN   = 1 << 2
 BUTTON_LEFT   = 1 << 1
 BUTTON_RIGHT  = 1 << 0
 
-.proc read_joypad1
-  lda JOYPAD_DOWN
-  tay
-  lda #1
-  sta JOYPAD1
-  sta JOYPAD_DOWN
-  lsr
-  sta JOYPAD1
-@loop:
-  lda JOYPAD1
-  lsr
-  rol JOYPAD_DOWN
-  bcc @loop
-  tya
-  eor JOYPAD_DOWN
-  and JOYPAD_DOWN
-  sta JOYPAD_PRESSED 
-  rts
-.endproc
+; Joypad State controller
+.scope Joypad
+  .proc update
+    lda JOYPAD_DOWN
+    tay
+    lda #1
+    sta JOYPAD1
+    sta JOYPAD_DOWN
+    lsr
+    sta JOYPAD1
+  @loop:
+    lda JOYPAD1
+    lsr
+    rol JOYPAD_DOWN
+    bcc @loop
+    tya
+    eor JOYPAD_DOWN
+    and JOYPAD_DOWN
+    sta JOYPAD_PRESSED
+    rts
+  .endproc
+.endscope
