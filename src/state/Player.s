@@ -1,16 +1,29 @@
 ;-------------------------------------------------------------------------------
-; [$30-$3F] Player Movement & Animation
+; [$30-$4F] Player State (Movement, Animation, etc.)
 ;-------------------------------------------------------------------------------
 .scope Player
   TARGET_VELOCITY_X         = $30 ; Signed Fixed Point 4.4
   VELOCITY_X                = $31 ; Signed Fixed Point 4.4
   POSITION_X                = $32 ; Signed Fixed Point 12.4
   POSITION_X_SPRITE         = $34 ; Unsigned Screen Coordinates
-  HEADING                   = $35 ; 0 = Right, 1 = Left
+  HEADING                   = $35 ; See `.enum Heading`, below...
 
-  ANIMATION_FRAME           = $36
-  ANIMATION_TIMER           = $37
-  ANIMATION_MOTION_STATE    = $38 ; 0 = Still, 1 = Walk/Run, 2 = Pivot
+  ; Currently unused, but coming soon...
+  ; TARGET_VELOCITY_Y         = $36 ; Signed Fixed Point 4.4
+  ; VELOCITY_Y                = $37 ; Signed Fixed Point 4.4
+  ; POSITION_Y                = $38 ; Signed Fixed Point 12.4
+  ; POSITION_Y_SPRITE         = $3A ; Unsigned Screen Coordinates
+
+  MOTION_STATE              = $3B ; See `.enum MotionState`, below...
+  ANIMATION_FRAME           = $3C
+  ANIMATION_TIMER           = $3D
+  IDLE_STATE                = $3E ; See `.enum IdleState`, below...
+  IDLE_TIMER                = $3F
+
+  .enum Heading
+    Right = 0
+    Left = 1
+  .endenum
 
   .enum MotionState
     Still = 0
@@ -18,9 +31,11 @@
     Pivot = 2
   .endenum
 
-  .enum Heading
-    Right = 0
-    Left = 1
+  .enum IdleState
+    Still = 0
+    Blink1 = 1
+    Still2 = 2
+    Blink2 = 3
   .endenum
 
   .proc init
@@ -205,6 +220,7 @@
       jsr update_motion_state
       jsr update_animation_frame
       jsr update_heading
+      jsr update_idle_state
       jsr update_sprite_tiles
       jsr update_sprite_position
       rts
@@ -230,7 +246,7 @@
       bne @walk
     @still:
       lda #MotionState::Still
-      sta ANIMATION_MOTION_STATE
+      sta MOTION_STATE
       rts
     @accelerating:
       lda #BUTTON_LEFT
@@ -246,11 +262,11 @@
       beq @walk
     @pivot:
       lda #MotionState::Pivot
-      sta ANIMATION_MOTION_STATE
+      sta MOTION_STATE
       rts
     @walk:
       lda #MotionState::Walk
-      sta ANIMATION_MOTION_STATE
+      sta MOTION_STATE
       rts
     .endproc
 
@@ -318,17 +334,50 @@
       rts
     .endproc
 
+    .proc update_idle_state
+      lda MOTION_STATE
+      cmp #MotionState::Still
+      beq @update_timer
+      lda timers
+      sta IDLE_TIMER
+      lda #IdleState::Still
+      sta IDLE_STATE
+      rts
+    @update_timer:
+      dec IDLE_TIMER
+      beq @update_state
+      rts
+    @update_state:
+      ldx IDLE_STATE
+      inx
+      cpx #4
+      bne @set_state
+      ldx #0
+    @set_state:
+      stx IDLE_STATE
+      lda timers, x
+      sta IDLE_TIMER
+      rts
+    timers:
+      .byte 245, 10, 10, 10
+    .endproc
+
     .proc update_sprite_tiles
-      ldx HEADING
-      lda ANIMATION_MOTION_STATE
+      lda MOTION_STATE
       cmp #MotionState::Pivot
       beq @pivot
       cmp #MotionState::Walk
       beq @walk
     @still:
-      lda walk_tiles, x
+      lda IDLE_STATE
+      asl
+      asl
+      clc
+      adc HEADING
+      tax
+      lda idle_tiles, x
       sta $200 + OAM_TILE
-      lda walk_tiles +2, x
+      lda idle_tiles + 2, x
       sta $204 + OAM_TILE
       rts
     @walk:
@@ -344,6 +393,7 @@
       sta $204 + OAM_TILE
       rts
     @pivot:
+      ldx HEADING
       lda pivot_tiles, x
       sta $200 + OAM_TILE
       lda pivot_tiles + 2, x
@@ -354,6 +404,11 @@
     walk_tiles:
       .byte $80, $82, $82, $80 ; Frame 1
       .byte $84, $86, $86, $84 ; Frame 2
+    idle_tiles:
+      .byte $80, $82, $82, $80
+      .byte $9C, $9E, $9E, $9C
+      .byte $80, $82, $82, $80
+      .byte $9C, $9E, $9E, $9C
     .endproc
 
     .proc update_sprite_position
