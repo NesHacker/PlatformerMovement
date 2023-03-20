@@ -6,7 +6,7 @@
   ; Holds major flags for the game. Bit 7 indicates to the NMI handler that
   ; state update are complete and the VRAM can be updated. Bits 0-6 are currently
   ; unused.
-  FLAGS = $20
+  flags = $20
 
   .proc init
     jsr init_palettes
@@ -103,12 +103,12 @@
 
 .macro SetRenderFlag
   lda #%10000000
-  ora Game::FLAGS
-  sta Game::FLAGS
+  ora Game::flags
+  sta Game::flags
 .endmacro
 
 .macro UnsetRenderFlag
   lda #%01111111
-  and Game::FLAGS
-  sta Game::FLAGS
+  and Game::flags
+  sta Game::flags
 .endmacro

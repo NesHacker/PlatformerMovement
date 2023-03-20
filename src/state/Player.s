@@ -2,23 +2,23 @@
 ; [$30-$4F] Player State (Movement, Animation, etc.)
 ;-------------------------------------------------------------------------------
 .scope Player
-  TARGET_VELOCITY_X         = $30 ; Signed Fixed Point 4.4
-  VELOCITY_X                = $31 ; Signed Fixed Point 4.4
-  POSITION_X                = $32 ; Signed Fixed Point 12.4
-  POSITION_X_SPRITE         = $34 ; Unsigned Screen Coordinates
-  HEADING                   = $35 ; See `.enum Heading`, below...
+  targetVelocityX   = $30   ; Signed Fixed Point 4.4
+  velocityX         = $31   ; Signed Fixed Point 4.4
+  positionX         = $32   ; Signed Fixed Point 12.4
+  spriteX           = $34   ; Unsigned Screen Coordinates
+  heading           = $35   ; See `.enum Heading`, below...
 
   ; Currently unused, but coming soon...
-  ; TARGET_VELOCITY_Y         = $36 ; Signed Fixed Point 4.4
-  ; VELOCITY_Y                = $37 ; Signed Fixed Point 4.4
-  ; POSITION_Y                = $38 ; Signed Fixed Point 12.4
-  ; POSITION_Y_SPRITE         = $3A ; Unsigned Screen Coordinates
+  ; targetVelocityY = $36   ; Signed Fixed Point 4.4
+  ; velocityY       = $37   ; Signed Fixed Point 4.4
+  ; positionY       = $38   ; Signed Fixed Point 12.4
+  ; spriteY         = $3A   ; Unsigned Screen Coordinates
 
-  MOTION_STATE              = $3B ; See `.enum MotionState`, below...
-  ANIMATION_FRAME           = $3C
-  ANIMATION_TIMER           = $3D
-  IDLE_STATE                = $3E ; See `.enum IdleState`, below...
-  IDLE_TIMER                = $3F
+  motionState              = $3B ; See `.enum MotionState`, below...
+  animationFrame           = $3C
+  animationTimer           = $3D
+  idleState                = $3E ; See `.enum IdleState`, below...
+  idleTimer                = $3F
 
   .enum Heading
     Right = 0
@@ -41,11 +41,11 @@
   .proc init
     ; Set the initial x-position to 48 ($30 hex and $0300 in 12.4 fixed point)
     lda #$30
-    sta POSITION_X_SPRITE
+    sta spriteX
     lda #0
-    sta POSITION_X
+    sta positionX
     lda #$03
-    sta POSITION_X+1
+    sta positionX+1
     rts
   .endproc
 
@@ -62,7 +62,7 @@
       ; Check if the B button is being pressed and save the state in the X register
       ldx #0
       lda #BUTTON_B
-      and JOYPAD_DOWN
+      and Joypad::down
       beq @check_right
       inx
     @check_right:
@@ -71,23 +71,23 @@
       ; 0 or 1, so we could use the table to set the "walk right" or "run right"
       ; velocity.
       lda #BUTTON_RIGHT
-      and JOYPAD_DOWN
+      and Joypad::down
       beq @check_left
       lda right_velocity, x
-      sta TARGET_VELOCITY_X
+      sta targetVelocityX
       rts
     @check_left:
       ; Similar to `@check_right` above, but for the left direction
       lda #BUTTON_LEFT
-      and JOYPAD_DOWN
+      and Joypad::down
       beq @no_direction
       lda left_velocity, x
-      sta TARGET_VELOCITY_X
+      sta targetVelocityX
       rts
     @no_direction:
       ; If the player isn't pressing left or right the horizontal velocity is 0
       lda #0
-      sta TARGET_VELOCITY_X
+      sta targetVelocityX
       rts
       ; The velocities are stored in signed 4.4 fixed point, just like in SMB3.
       ; The idea is that the left 4 bits are the "whole" part of the number and the
@@ -113,33 +113,33 @@
       ; values, but I just keep things simple and use inc/dec to increase the value
       ; by a maximum of 1 each frame (which gives the effect of a constant
       ; acceleration).
-      lda VELOCITY_X
+      lda velocityX
       sec
-      sbc TARGET_VELOCITY_X
+      sbc targetVelocityX
       bne @check_greater
       rts
     @check_greater:
       bmi @lesser
-      dec VELOCITY_X
+      dec velocityX
       rts
     @lesser:
-      inc VELOCITY_X
+      inc velocityX
       rts
     .endproc
 
     .proc apply_velocity
       ; Check to see if we're moving to the right (positive) or the left (negative)
-      lda VELOCITY_X
+      lda velocityX
       bmi @negative
     @positive:
       ; Positive velocity is easy: just add the 4.4 fixed point velocity to the
       ; 12.4 fixed point position.
       clc
-      adc POSITION_X
-      sta POSITION_X
+      adc positionX
+      sta positionX
       lda #0
-      adc POSITION_X + 1
-      sta POSITION_X + 1
+      adc positionX + 1
+      sta positionX + 1
       rts
     @negative:
       ; There's probably a really clever way to do this just with ADC but I am lazy
@@ -147,23 +147,23 @@
       ; velocity and use SBC.
       lda #0
       sec
-      sbc VELOCITY_X
+      sbc velocityX
       sta $00
-      lda POSITION_X
+      lda positionX
       sec
       sbc $00
-      sta POSITION_X
-      lda POSITION_X+1
+      sta positionX
+      lda positionX+1
       sbc #0
-      sta POSITION_X+1
+      sta positionX+1
       rts
     .endproc
 
     .proc bound_position
       ; Convert the fixed point position coordinate into screen coordinates
-      lda POSITION_X
+      lda positionX
       sta $00
-      lda POSITION_X + 1
+      lda positionX + 1
       sta $01
       lsr $01
       ror $00
@@ -175,9 +175,9 @@
       ror $00
       ; Assume that everything is fine and save the sprite position
       lda $00
-      sta POSITION_X_SPRITE
+      sta spriteX
       ; Check if we are moving left or right (negative or positive respectively)
-      lda VELOCITY_X
+      lda velocityX
       bmi @negative
     @positive:
       lda $01
@@ -190,27 +190,27 @@
       ; $EF = 239 = 255 - 16, this is the right bound since the screen is 256 pixels
       ; wide and the character is 16 pixels wide.
       lda #$EF
-      sta POSITION_X_SPRITE
+      sta spriteX
       lda #$0E
-      sta POSITION_X+1
+      sta positionX+1
       lda #$F0
-      sta POSITION_X
+      sta positionX
       ; Finally, set the velocity to 0 since the player is being "stopped"
       lda #0
-      sta VELOCITY_X
+      sta velocityX
       rts
     @negative:
       ; The negative case is really simple, just check if the high order byte of the
       ; 12.4 fixed point position is negative. If so bound everything to 0.
-      lda POSITION_X+1
+      lda positionX+1
       bmi @bound_lower
       rts
     @bound_lower:
       lda #0
-      sta POSITION_X
-      sta POSITION_X + 1
-      sta POSITION_X_SPRITE
-      sta VELOCITY_X
+      sta positionX
+      sta positionX + 1
+      sta spriteX
+      sta velocityX
       rts
     .endproc
   .endscope
@@ -237,36 +237,36 @@
       ;     If T > 0 && V < 0: PIVOT
       ;     If T < 0 && V > 0: PIVOT
       ;   Else: WALK
-      lda TARGET_VELOCITY_X
-      cmp VELOCITY_X
+      lda targetVelocityX
+      cmp velocityX
       bne @accelerating
     @steady:
-      lda VELOCITY_X
+      lda velocityX
       beq @still
       bne @walk
     @still:
       lda #MotionState::Still
-      sta MOTION_STATE
+      sta motionState
       rts
     @accelerating:
       lda #BUTTON_LEFT
       ora #BUTTON_RIGHT
-      and JOYPAD_DOWN
+      and Joypad::down
       beq @walk
       lda #%10000000
-      and TARGET_VELOCITY_X
+      and targetVelocityX
       sta $00
       lda #%10000000
-      and VELOCITY_X
+      and velocityX
       cmp $00
       beq @walk
     @pivot:
       lda #MotionState::Pivot
-      sta MOTION_STATE
+      sta motionState
       rts
     @walk:
       lda #MotionState::Walk
-      sta MOTION_STATE
+      sta motionState
       rts
     .endproc
 
@@ -278,28 +278,28 @@
       ;   If frame timer == 0:
       ;     Reset frame timer based on V
       ;     Increment the frame
-      lda VELOCITY_X
+      lda velocityX
       bne @moving
       lda delay_by_velocity
-      sta ANIMATION_TIMER
+      sta animationTimer
       rts
     @moving:
-      dec ANIMATION_TIMER
+      dec animationTimer
       beq @next_frame
       rts
     @next_frame:
-      ldx VELOCITY_X
+      ldx velocityX
       bpl @transition_state
       lda #0
       sec
-      sbc VELOCITY_X
+      sbc velocityX
       tax
     @transition_state:
       lda delay_by_velocity, x
-      sta ANIMATION_TIMER
+      sta animationTimer
       lda #1
-      eor ANIMATION_FRAME
-      sta ANIMATION_FRAME
+      eor animationFrame
+      sta animationFrame
       rts
     delay_by_velocity:
       .byte 12, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10
@@ -310,7 +310,7 @@
     .proc update_heading
       ; If the target velocity is 0 then the player isn't pressing left or right and
       ; the heading doesn't need to change.
-      lda TARGET_VELOCITY_X
+      lda targetVelocityX
       bne @check_heading
       rts
       ; If the target velocity is non-zero, check to see if player is heading in the
@@ -319,13 +319,13 @@
       asl
       lda #0
       rol
-      cmp HEADING
+      cmp heading
       bne @update_heading
       rts
     @update_heading:
       ; If the desired heading is not equal to the current heading based on the
       ; target velocity, then update the heading.
-      sta HEADING
+      sta heading
       ; Toggle the "horizontal" mirroring on the character sprites
       lda #%01000000
       eor $200 + OAM_ATTR
@@ -335,45 +335,45 @@
     .endproc
 
     .proc update_idle_state
-      lda MOTION_STATE
+      lda motionState
       cmp #MotionState::Still
       beq @update_timer
       lda timers
-      sta IDLE_TIMER
+      sta idleTimer
       lda #IdleState::Still
-      sta IDLE_STATE
+      sta idleState
       rts
     @update_timer:
-      dec IDLE_TIMER
+      dec idleTimer
       beq @update_state
       rts
     @update_state:
-      ldx IDLE_STATE
+      ldx idleState
       inx
       cpx #4
       bne @set_state
       ldx #0
     @set_state:
-      stx IDLE_STATE
+      stx idleState
       lda timers, x
-      sta IDLE_TIMER
+      sta idleTimer
       rts
     timers:
       .byte 245, 10, 10, 10
     .endproc
 
     .proc update_sprite_tiles
-      lda MOTION_STATE
+      lda motionState
       cmp #MotionState::Pivot
       beq @pivot
       cmp #MotionState::Walk
       beq @walk
     @still:
-      lda IDLE_STATE
+      lda idleState
       asl
       asl
       clc
-      adc HEADING
+      adc heading
       tax
       lda idle_tiles, x
       sta $200 + OAM_TILE
@@ -381,11 +381,11 @@
       sta $204 + OAM_TILE
       rts
     @walk:
-      lda ANIMATION_FRAME
+      lda animationFrame
       asl
       asl
       clc
-      adc HEADING
+      adc heading
       tax
       lda walk_tiles, x
       sta $200 + OAM_TILE
@@ -393,7 +393,7 @@
       sta $204 + OAM_TILE
       rts
     @pivot:
-      ldx HEADING
+      ldx heading
       lda pivot_tiles, x
       sta $200 + OAM_TILE
       lda pivot_tiles + 2, x
@@ -414,7 +414,7 @@
     .proc update_sprite_position
       ; This is computed in `bound_position` above, so all we have to do is set the
       ; sprite coordinates appropriately.
-      lda POSITION_X_SPRITE
+      lda spriteX
       sta $200 + OAM_X
       clc
       adc #8

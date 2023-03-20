@@ -3,7 +3,7 @@
 ;-------------------------------------------------------------------------------
 ; The state for the controller is stored across two bytes, each of which is a
 ; bitmask where each bit corresponds to a single button on the controller. This
-; demo only uses the first controller (JOYPAD_1).
+; demo only uses the first controller.
 ;
 ; The bits in each mask are mapped as such:
 ;
@@ -19,9 +19,6 @@
 ;  +---------------> Bit 7: A
 ;
 ;-------------------------------------------------------------------------------
-
-JOYPAD_DOWN     = $21   ; Button "down" bitmaks, 1 means down & 0 means up.
-JOYPAD_PRESSED  = $22   ; Button "pressed" bitmask, 1 means pressed this frame.
 
 ; Controller port addresses
 JOYPAD1 = $4016
@@ -39,23 +36,26 @@ BUTTON_RIGHT  = 1 << 0
 
 ; Joypad State controller
 .scope Joypad
+  down    = $21   ; Button "down" bitmaks, 1 means down & 0 means up.
+  pressed = $22   ; Button "pressed" bitmask, 1 means pressed this frame.
+
   .proc update
-    lda JOYPAD_DOWN
+    lda down
     tay
     lda #1
     sta JOYPAD1
-    sta JOYPAD_DOWN
+    sta down
     lsr
     sta JOYPAD1
   @loop:
     lda JOYPAD1
     lsr
-    rol JOYPAD_DOWN
+    rol down
     bcc @loop
     tya
-    eor JOYPAD_DOWN
-    and JOYPAD_DOWN
-    sta JOYPAD_PRESSED
+    eor down
+    and down
+    sta pressed
     rts
   .endproc
 .endscope

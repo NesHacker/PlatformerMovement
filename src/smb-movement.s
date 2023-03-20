@@ -137,7 +137,7 @@ loop:
   jsr game_loop
   SetRenderFlag
 @wait_for_render:
-  bit Game::FLAGS
+  bit Game::flags
   bmi @wait_for_render
   jmp loop
 .endproc
@@ -153,7 +153,7 @@ loop:
 ; `render_loop` routine below...
 ;-------------------------------------------------------------------------------
 .proc nmi
-  bit Game::FLAGS
+  bit Game::flags
   bpl @return
   jsr render_loop
   UnsetRenderFlag
