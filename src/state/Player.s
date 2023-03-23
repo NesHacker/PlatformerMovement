@@ -8,17 +8,18 @@
   spriteX           = $34   ; Unsigned Screen Coordinates
   heading           = $35   ; See `.enum Heading`, below...
 
-  ; Currently unused, but coming soon...
-  ; targetVelocityY = $36   ; Signed Fixed Point 4.4
-  ; velocityY       = $37   ; Signed Fixed Point 4.4
-  ; positionY       = $38   ; Signed Fixed Point 12.4
-  ; spriteY         = $3A   ; Unsigned Screen Coordinates
+  targetVelocityY   = $36   ; Signed Fixed Point 4.4
+  velocityY         = $37   ; Signed Fixed Point 4.4
+  positionY         = $38   ; Signed Fixed Point 12.4
+  spriteY           = $3A   ; Unsigned Screen Coordinates
 
-  motionState              = $3B ; See `.enum MotionState`, below...
-  animationFrame           = $3C
-  animationTimer           = $3D
-  idleState                = $3E ; See `.enum IdleState`, below...
-  idleTimer                = $3F
+  motionState       = $3B ; See `.enum MotionState`, below...
+  animationFrame    = $3C
+  animationTimer    = $3D
+  idleState         = $3E ; See `.enum IdleState`, below...
+  idleTimer         = $3F
+
+  jumpTimer         = $40
 
   .enum Heading
     Right = 0
@@ -27,8 +28,10 @@
 
   .enum MotionState
     Still = 0
-    Walk  = 1
+    Walk = 1
     Pivot = 2
+    Jumping = 3
+    Falling = 4
   .endenum
 
   .enum IdleState
@@ -38,38 +41,118 @@
     Blink2 = 3
   .endenum
 
+  .scope Jump
+    FloorHeight = 143
+    InitialVelocity = $28
+    InitialJumpTimer = 16
+    MaxFallSpeed = $D8
+  .endscope
+
   .proc init
-    ; Set the initial x-position to 48 ($30 hex and $0300 in 12.4 fixed point)
-    lda #$30
+    jsr init_x
+    jsr init_y
+  .endproc
+
+  .proc init_x
+    ; Set the initialx-position to 48 ($0300 in 12.4 fixed point)
+    lda #48
     sta spriteX
-    lda #0
+    lda #$00
     sta positionX
     lda #$03
-    sta positionX+1
+    sta positionX + 1
+    ; Initialize the velocity and target velocity
+    lda #0
+    sta targetVelocityX
+    sta velocityX
+    rts
+  .endproc
+
+  .proc init_y
+    ; Set the initial y-position to 143 ($08F0 in 12.4 fixed point)
+    lda #Jump::FloorHeight
+    sta spriteY
+    lda #$F0
+    sta positionY
+    lda #$08
+    sta positionY + 1
+    ; Initialize the velocity and target velocity
+    lda #0
+    sta targetVelocityY
+    sta velocityY
     rts
   .endproc
 
   .scope Movement
     .proc update
-      jsr set_target_velocity
-      jsr accelerate
-      jsr apply_velocity
-      jsr bound_position
+      jsr set_target_y_velocity
+      jsr set_target_x_velocity
+      jsr accelerate_y
+      jsr accelerate_x
+      jsr apply_velocity_y
+      jsr apply_velocity_x
+      jsr bound_position_y
+      jsr bound_position_x
       rts
     .endproc
 
-    .proc set_target_velocity
-      ; Check if the B button is being pressed and save the state in the X register
+    .proc set_target_y_velocity
+      lda motionState
+      cmp #MotionState::Jumping
+      beq @jumping
+      cmp #MotionState::Falling
+      bne @grounded
+      rts
+    @grounded:
+      lda Joypad::pressed
+      and #BUTTON_A
+      bne @begin_jump
+      rts
+    @begin_jump:
+      lda #Jump::InitialVelocity
+      sta velocityY
+      sta targetVelocityY
+      lda #Jump::InitialJumpTimer
+      sta jumpTimer
+      lda #MotionState::Jumping
+      sta motionState
+      rts
+    @jumping:
+      lda Joypad::down
+      and #BUTTON_A
+      beq @begin_fall
+      dec jumpTimer
+      beq @begin_fall
+      rts
+    @begin_fall:
+      lda #MotionState::Falling
+      sta motionState
+      lda #0
+      sta jumpTimer
+      lda #$D8
+      sta targetVelocityY
+      rts
+    .endproc
+
+    .proc set_target_x_velocity
+      lda motionState
+      cmp #MotionState::Jumping
+      bcc @grounded
+    @airborne:
+      rts
+    @grounded:
+      ; Check if the B button is being pressed and save the state in the X
+      ; register
       ldx #0
       lda #BUTTON_B
       and Joypad::down
       beq @check_right
       inx
     @check_right:
-      ; Check if the right d-pad is down and if so set the target velocity by using
-      ; the lookup table at the end of the routine. This is why we set x to either
-      ; 0 or 1, so we could use the table to set the "walk right" or "run right"
-      ; velocity.
+      ; Check if the right d-pad is down and if so set the target velocity by
+      ; using the lookup table at the end of the routine. This is why we set x
+      ; to either 0 or 1, so we could use the table to set the "walk right" or
+      ; "run right" velocity.
       lda #BUTTON_RIGHT
       and Joypad::down
       beq @check_left
@@ -90,28 +173,51 @@
       sta targetVelocityX
       rts
       ; The velocities are stored in signed 4.4 fixed point, just like in SMB3.
-      ; The idea is that the left 4 bits are the "whole" part of the number and the
-      ; right four bits are the "fractional" part.
+      ; The idea is that the left 4 bits are the "whole" part of the number and
+      ; the right four bits are the "fractional" part.
     right_velocity:
       .byte $18, $28
     left_velocity:
       .byte $E8, $D8
     .endproc
 
-    .proc accelerate
-      ; Subtract the current velocity from the target velocity to compare the two
-      ; values.
+    .proc accelerate_y
+      ; Works exactly like accelerate_x, see the description below for details.
+      lda velocityY
+      sec
+      sbc targetVelocityY
+      bne @check_greater
+      rts
+    @check_greater:
+      bmi @lesser
+      dec velocityY
+      dec velocityY
+      rts
+    @lesser:
+      inc velocityY
+      rts
+    .endproc
+
+    .proc accelerate_x
+      lda motionState
+      cmp #MotionState::Jumping
+      bcc @grounded
+    @airborne:
+      rts
+    @grounded:
+      ; Subtract the current velocity from the target velocity to compare the
+      ; two values.
       ;
       ; If V - T == 0:
       ;   Then the current velocity is at the target and we are done.
       ; If V - T < 0:
-      ;   Then the velocity is greater than the target and should be *decreased*.
+      ;   Then the velocity is greater than the target and should be decreased.
       ; Otherwise, if V - T > 0:
-      ;   Then the velocity is less than the target and should be *increased*.
+      ;   Then the velocity is less than the target and should be increased.
       ;
-      ; I'm pretty sure SMB3 uses a lookup table to handle the specific acceleration
-      ; values, but I just keep things simple and use inc/dec to increase the value
-      ; by a maximum of 1 each frame (which gives the effect of a constant
+      ; I'm pretty sure SMB3 uses a lookup table to handle the acceleration
+      ; values, but I just keep things simple and use inc/dec to increase the
+      ; value by a maximum of 1 each frame (which gives the effect of a constant
       ; acceleration).
       lda velocityX
       sec
@@ -127,7 +233,32 @@
       rts
     .endproc
 
-    .proc apply_velocity
+    .proc apply_velocity_y
+      lda velocityY
+      bmi @negative
+    @positive:
+      lda positionY
+      sec
+      sbc velocityY
+      sta positionY
+      lda positionY + 1
+      sbc #0
+      sta positionY + 1
+      rts
+    @negative:
+      lda #0
+      sec
+      sbc velocityY
+      clc
+      adc positionY
+      sta positionY
+      lda #0
+      adc positionY + 1
+      sta positionY + 1
+      rts
+    .endproc
+
+    .proc apply_velocity_x
       ; Check to see if we're moving to the right (positive) or the left (negative)
       lda velocityX
       bmi @negative
@@ -159,7 +290,41 @@
       rts
     .endproc
 
-    .proc bound_position
+    .proc bound_position_y
+      ; Convert from 12.4 fixed point into screen coordinates
+      lda positionY
+      sta $00
+      lda positionY + 1
+      sta $01
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      ; Assume we don't need to bound and set the sprite Y position
+      lda $00
+      sta spriteY
+      ; If the character is falling, check to see if they have landed
+      lda motionState
+      cmp #MotionState::Falling
+      beq @falling
+      rts
+    @falling:
+      lda $00
+      cmp #Jump::FloorHeight
+      bcs @handle_landing
+      rts
+    @handle_landing:
+      jsr init_y
+      lda #MotionState::Still
+      sta motionState
+      rts
+    .endproc
+
+    .proc bound_position_x
       ; Convert the fixed point position coordinate into screen coordinates
       lda positionX
       sta $00
@@ -227,6 +392,12 @@
     .endproc
 
     .proc update_motion_state
+      lda motionState
+      cmp #MotionState::Jumping
+      bcc @grounded
+    @jumping:
+      rts
+    @grounded:
       ; If T = V:
       ;   // Steady motion
       ;   If T == 0: STILL
@@ -364,6 +535,8 @@
 
     .proc update_sprite_tiles
       lda motionState
+      cmp #MotionState::Jumping
+      bcs @jumping_or_falling
       cmp #MotionState::Pivot
       beq @pivot
       cmp #MotionState::Walk
@@ -378,6 +551,13 @@
       lda idle_tiles, x
       sta $200 + OAM_TILE
       lda idle_tiles + 2, x
+      sta $204 + OAM_TILE
+      rts
+    @jumping_or_falling:
+      ldx heading
+      lda jumping_tiles, x
+      sta $200 + OAM_TILE
+      lda jumping_tiles + 2, x
       sta $204 + OAM_TILE
       rts
     @walk:
@@ -399,6 +579,8 @@
       lda pivot_tiles + 2, x
       sta $204 + OAM_TILE
       rts
+    jumping_tiles:
+      .byte $88, $8A, $8A, $88
     pivot_tiles:
       .byte $98, $9A, $9A, $98 ; Pivot is the same no matter the animation frame
     walk_tiles:
@@ -412,13 +594,16 @@
     .endproc
 
     .proc update_sprite_position
-      ; This is computed in `bound_position` above, so all we have to do is set the
-      ; sprite coordinates appropriately.
+      ; This is computed in `bound_position` above, so all we have to do is set
+      ; the sprite coordinates appropriately.
       lda spriteX
       sta $200 + OAM_X
       clc
       adc #8
       sta $204 + OAM_X
+      lda spriteY
+      sta $200
+      sta $204
       rts
     .endproc
   .endscope
