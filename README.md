@@ -1,7 +1,6 @@
 # Super Mario Bros. Movement
 A movement and controls demo inspried by Super Mario Bros. 3
 
-
 ## Contributing
 Find a bug? Think this could use a feature? Well then fork the repo and make a
 pull request. For the most part as long as you don't change anything core to the

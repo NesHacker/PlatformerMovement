@@ -1,5 +1,5 @@
 ;-------------------------------------------------------------------------------
-; [$30-$4F] Player State (Movement, Animation, etc.)
+; [$30-$3F] Player State (Movement, Animation, etc.)
 ;-------------------------------------------------------------------------------
 .scope Player
   targetVelocityX   = $30   ; Signed Fixed Point 4.4
@@ -8,18 +8,15 @@
   spriteX           = $34   ; Unsigned Screen Coordinates
   heading           = $35   ; See `.enum Heading`, below...
 
-  targetVelocityY   = $36   ; Signed Fixed Point 4.4
-  velocityY         = $37   ; Signed Fixed Point 4.4
-  positionY         = $38   ; Signed Fixed Point 12.4
-  spriteY           = $3A   ; Unsigned Screen Coordinates
+  velocityY         = $36   ; Signed Fixed Point 4.4
+  positionY         = $37   ; Signed Fixed Point 12.4
+  spriteY           = $39   ; Unsigned Screen Coordinates
 
-  motionState       = $3B ; See `.enum MotionState`, below...
-  animationFrame    = $3C
-  animationTimer    = $3D
-  idleState         = $3E ; See `.enum IdleState`, below...
-  idleTimer         = $3F
-
-  jumpTimer         = $40
+  motionState       = $3A   ; See `.enum MotionState`, below...
+  animationFrame    = $3B
+  animationTimer    = $3C
+  idleState         = $3D   ; See `.enum IdleState`, below...
+  idleTimer         = $3E
 
   .enum Heading
     Right = 0
@@ -30,8 +27,7 @@
     Still = 0
     Walk = 1
     Pivot = 2
-    Jumping = 3
-    Falling = 4
+    Airborne = 3
   .endenum
 
   .enum IdleState
@@ -43,9 +39,8 @@
 
   .scope Jump
     FloorHeight = 143
-    InitialVelocity = $28
-    InitialJumpTimer = 16
-    MaxFallSpeed = $D8
+    InitialVelocity = $C8
+    MaxFallSpeed = $40
   .endscope
 
   .proc init
@@ -54,7 +49,7 @@
   .endproc
 
   .proc init_x
-    ; Set the initialx-position to 48 ($0300 in 12.4 fixed point)
+    ; Set the initial x-position to 48 ($0300 in 12.4 fixed point)
     lda #48
     sta spriteX
     lda #$00
@@ -78,65 +73,138 @@
     sta positionY + 1
     ; Initialize the velocity and target velocity
     lda #0
-    sta targetVelocityY
     sta velocityY
     rts
   .endproc
 
   .scope Movement
     .proc update
-      jsr set_target_y_velocity
+      jsr update_vertical_motion
       jsr set_target_x_velocity
-      jsr accelerate_y
       jsr accelerate_x
-      jsr apply_velocity_y
       jsr apply_velocity_x
-      jsr bound_position_y
       jsr bound_position_x
       rts
     .endproc
 
-    .proc set_target_y_velocity
+    .proc update_vertical_motion
       lda motionState
-      cmp #MotionState::Jumping
-      beq @jumping
-      cmp #MotionState::Falling
-      bne @grounded
-      rts
-    @grounded:
+      cmp #MotionState::Airborne
+      beq @airborne
+    @check_jump:
       lda Joypad::pressed
       and #BUTTON_A
       bne @begin_jump
+      lda #0
+      sta velocityY
       rts
     @begin_jump:
       lda #Jump::InitialVelocity
       sta velocityY
-      sta targetVelocityY
-      lda #Jump::InitialJumpTimer
-      sta jumpTimer
-      lda #MotionState::Jumping
+      lda #MotionState::Airborne
       sta motionState
       rts
-    @jumping:
+    @airborne:
+      jsr update_jump_velocity
+      jsr apply_velocity_y
+      jsr bound_position_y
+      rts
+    .endproc
+
+    .proc update_jump_velocity
+      ; Determine if the Y velocity should decelerate quickly or slowly.
+      ; The velocity decelerates slowly (1/frame) for up to 24 frames as
+      ; long as the player holds the "A Button". After that it goes quickly
+      ; (5/frame)
+      ldy #5
+      lda velocityY
+      cmp #$E0
+      bpl @decelerate
       lda Joypad::down
       and #BUTTON_A
-      beq @begin_fall
-      dec jumpTimer
-      beq @begin_fall
+      beq @decelerate
+      ldy #1
+    @decelerate:
+      ; Perform the deceleration (the code above stores the rate in Y)
+      tya
+      clc
+      adc velocityY
+      bmi @store_velocity
+    @check_Falling_speed:
+      ; If the velocity is positive, check and cap the falling speed
+      cmp #Jump::MaxFallSpeed
+      bcc @store_velocity
+      lda #Jump::MaxFallSpeed
+    @store_velocity:
+      ; Finally store the velocity and exit
+      sta velocityY
       rts
-    @begin_fall:
-      lda #MotionState::Falling
-      sta motionState
+    .endproc
+
+    .proc apply_velocity_y
+      lda velocityY
+      bmi @negative
+     @positive:
+      ; Positive velocity is easy: just add the 4.4 fixed point velocity to the
+      ; 12.4 fixed point position.
+      clc
+      adc positionY
+      sta positionY
       lda #0
-      sta jumpTimer
-      lda #$D8
-      sta targetVelocityY
+      adc positionY + 1
+      sta positionY + 1
+      rts
+    @negative:
+      ; There's probably a really clever way to do this just with ADC but I am
+      ; lazy and conceptually it made things easier in my head to invert the
+      ; negative velocity and use SBC.
+      lda #0
+      sec
+      sbc velocityY
+      sta $00
+      lda positionY
+      sec
+      sbc $00
+      sta positionY
+      lda positionY+1
+      sbc #0
+      sta positionY+1
+      rts
+    .endproc
+
+    .proc bound_position_y
+      ; Convert from 12.4 fixed point into screen coordinates
+      lda positionY
+      sta $00
+      lda positionY + 1
+      sta $01
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      lsr $01
+      ror $00
+      lda $00
+      ; Assume everything is fine and set the sprite position
+      sta spriteY
+    @check_landing:
+      ; Check to see if the player has landed
+      cmp #Jump::FloorHeight
+      bcs @land
+      rts
+    @land:
+      ; Land by re-initializing the Y variables and resetting the  motion state
+      jsr init_y
+      lda #MotionState::Still
+      sta motionState
       rts
     .endproc
 
     .proc set_target_x_velocity
       lda motionState
-      cmp #MotionState::Jumping
+      cmp #MotionState::Airborne
       bcc @grounded
     @airborne:
       rts
@@ -181,28 +249,12 @@
       .byte $E8, $D8
     .endproc
 
-    .proc accelerate_y
-      ; Works exactly like accelerate_x, see the description below for details.
-      lda velocityY
-      sec
-      sbc targetVelocityY
-      bne @check_greater
-      rts
-    @check_greater:
-      bmi @lesser
-      dec velocityY
-      dec velocityY
-      rts
-    @lesser:
-      inc velocityY
-      rts
-    .endproc
-
     .proc accelerate_x
       lda motionState
-      cmp #MotionState::Jumping
+      cmp #MotionState::Airborne
       bcc @grounded
     @airborne:
+      ; TODO Handle horizontal movement when airborne
       rts
     @grounded:
       ; Subtract the current velocity from the target velocity to compare the
@@ -233,31 +285,6 @@
       rts
     .endproc
 
-    .proc apply_velocity_y
-      lda velocityY
-      bmi @negative
-    @positive:
-      lda positionY
-      sec
-      sbc velocityY
-      sta positionY
-      lda positionY + 1
-      sbc #0
-      sta positionY + 1
-      rts
-    @negative:
-      lda #0
-      sec
-      sbc velocityY
-      clc
-      adc positionY
-      sta positionY
-      lda #0
-      adc positionY + 1
-      sta positionY + 1
-      rts
-    .endproc
-
     .proc apply_velocity_x
       ; Check to see if we're moving to the right (positive) or the left (negative)
       lda velocityX
@@ -273,9 +300,9 @@
       sta positionX + 1
       rts
     @negative:
-      ; There's probably a really clever way to do this just with ADC but I am lazy
-      ; and conceptually it made things easier in my head to invert the negative
-      ; velocity and use SBC.
+      ; There's probably a really clever way to do this just with ADC but I am
+      ; lazy and conceptually it made things easier in my head to invert the
+      ; negative velocity and use SBC.
       lda #0
       sec
       sbc velocityX
@@ -287,40 +314,6 @@
       lda positionX+1
       sbc #0
       sta positionX+1
-      rts
-    .endproc
-
-    .proc bound_position_y
-      ; Convert from 12.4 fixed point into screen coordinates
-      lda positionY
-      sta $00
-      lda positionY + 1
-      sta $01
-      lsr $01
-      ror $00
-      lsr $01
-      ror $00
-      lsr $01
-      ror $00
-      lsr $01
-      ror $00
-      ; Assume we don't need to bound and set the sprite Y position
-      lda $00
-      sta spriteY
-      ; If the character is falling, check to see if they have landed
-      lda motionState
-      cmp #MotionState::Falling
-      beq @falling
-      rts
-    @falling:
-      lda $00
-      cmp #Jump::FloorHeight
-      bcs @handle_landing
-      rts
-    @handle_landing:
-      jsr init_y
-      lda #MotionState::Still
-      sta motionState
       rts
     .endproc
 
@@ -393,7 +386,7 @@
 
     .proc update_motion_state
       lda motionState
-      cmp #MotionState::Jumping
+      cmp #MotionState::Airborne
       bcc @grounded
     @jumping:
       rts
@@ -535,8 +528,8 @@
 
     .proc update_sprite_tiles
       lda motionState
-      cmp #MotionState::Jumping
-      bcs @jumping_or_falling
+      cmp #MotionState::Airborne
+      beq @airborne
       cmp #MotionState::Pivot
       beq @pivot
       cmp #MotionState::Walk
@@ -553,7 +546,7 @@
       lda idle_tiles + 2, x
       sta $204 + OAM_TILE
       rts
-    @jumping_or_falling:
+    @airborne:
       ldx heading
       lda jumping_tiles, x
       sta $200 + OAM_TILE
