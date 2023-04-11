@@ -397,7 +397,7 @@
       lda motionState
       cmp #MotionState::Airborne
       bcc @grounded
-    @jumping:
+    @airborne:
       rts
     @grounded:
       ; If T = V:
