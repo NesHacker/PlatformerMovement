@@ -203,12 +203,6 @@
     .endproc
 
     .proc set_target_x_velocity
-      lda motionState
-      cmp #MotionState::Airborne
-      bcc @grounded
-    @airborne:
-      rts
-    @grounded:
       ; Check if the B button is being pressed and save the state in the X
       ; register
       ldx #0
@@ -252,11 +246,26 @@
     .proc accelerate_x
       lda motionState
       cmp #MotionState::Airborne
-      bcc @grounded
+      bne @accelerate
     @airborne:
-      ; TODO Handle horizontal movement when airborne
+      ; When airborne there is no friction, so ignore target velocities of 0
+      lda targetVelocityX
+      bne @check_directional_velocity
       rts
-    @grounded:
+    @check_directional_velocity:
+      lda velocityX
+      bmi @negative
+    @positive:
+      ; If moving right, only accelerate if the target velocity is higher
+      cmp targetVelocityX
+      bcc @accelerate
+      rts
+    @negative:
+      ; Similarly, if moving left only do so if the target velocity is lower
+      cmp targetVelocityX
+      bcs @accelerate
+      rts
+    @accelerate:
       ; Subtract the current velocity from the target velocity to compare the
       ; two values.
       ;
