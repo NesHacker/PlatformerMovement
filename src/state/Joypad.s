@@ -36,10 +36,17 @@ BUTTON_RIGHT  = 1 << 0
 
 ; Joypad State controller
 .scope Joypad
-  down    = $21   ; Button "down" bitmaks, 1 means down & 0 means up.
-  pressed = $22   ; Button "pressed" bitmask, 1 means pressed this frame.
+  down    = $21     ; Button "down" bitmaks, 1 means down & 0 means up.
+  pressed = $22     ; Button "pressed" bitmask, 1 means pressed this frame.
+  downTiles = $600  ; Holds tile values for the controlller state in the BG
 
   .proc update
+    jsr read_joypad1
+    jsr compute_button_tiles
+    rts
+  .endproc
+
+  .proc read_joypad1
     lda down
     tay
     lda #1
@@ -56,6 +63,21 @@ BUTTON_RIGHT  = 1 << 0
     eor down
     and down
     sta pressed
+    rts
+  .endproc
+
+  .proc compute_button_tiles
+    ldx #7
+    ldy down
+  @loop:
+    tya
+    lsr
+    tay
+    lda #$29
+    adc #0
+    sta downTiles, x
+    dex
+    bpl @loop
     rts
   .endproc
 .endscope

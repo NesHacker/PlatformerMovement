@@ -191,9 +191,29 @@ loop:
 ; Rendering loop logic that runs during the NMI
 ;-------------------------------------------------------------------------------
 .proc render_loop
+  ; Update the binary button indicator tiles
+  VramColRow 2, 25, NAMETABLE_A
+  lda Joypad::downTiles
+  sta PPU_DATA
+  lda Joypad::downTiles + 1
+  sta PPU_DATA
+  lda Joypad::downTiles + 4
+  sta PPU_DATA
+  lda Joypad::downTiles + 5
+  sta PPU_DATA
+  lda Joypad::downTiles + 6
+  sta PPU_DATA
+  lda Joypad::downTiles + 7
+  sta PPU_DATA
+
+  ; Transfer Sprites via OAM
   lda #$00
   sta OAM_ADDR
   lda #$02
   sta OAM_DMA
+
+  ; Reset the VRAM address
+  VramReset
+
   rts
 .endproc
