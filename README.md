@@ -1,5 +1,5 @@
-# Super Mario Bros. Movement
-A movement and controls demo inspried by Super Mario Bros. 3
+# Plarformer Movement
+An SMB3 inspired movement and controls demo.
 
 ## Contributing
 Find a bug? Think this could use a feature? Well then fork the repo and make a
