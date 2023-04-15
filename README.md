@@ -39,7 +39,8 @@ these rules:
 #### Code Format
 1. Indent using spaces, two characters wide.
 2. Do not exceed 80 characters per line.
-3. Don't mix logic in files (i.e. joypad code shouldn't go in `Player.s`)
+3. Don't mix logic in files (joypad code shouldn't go in `Player.s`, for
+   instance)
 
 #### Casing
 1. Instructions and registers in lowercase: `lsr a`
