@@ -66,6 +66,7 @@
 .include "state/Game.s"
 .include "state/Joypad.s"
 .include "state/Player.s"
+.include "state/VelocityIndicator.s"
 
 ;-------------------------------------------------------------------------------
 ; Core reset method for the game, this is called on powerup and when the system
@@ -168,6 +169,7 @@ loop:
   ; Initialize the game state
   jsr Game::init
   jsr Player::init
+  jsr VelocityIndicator::init
 
   ; Enable rendering and NMI
   lda #%10110000
@@ -184,6 +186,7 @@ loop:
   jsr Joypad::update
   jsr Player::Movement::update
   jsr Player::Sprite::update
+  jsr VelocityIndicator::update
   rts
 .endproc
 

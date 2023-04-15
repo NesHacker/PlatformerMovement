@@ -81,20 +81,28 @@
     jsr ppu_fill_line
     lda #$28
     sta PPU_DATA
-    ; Draw the horizontal velocity indicator
-    VramColRow 1, 27, NAMETABLE_A
-    lda #$30
-    sta PPU_DATA
-    lda #$31
-    sta PPU_DATA
-    sta PPU_DATA
-    sta PPU_DATA
-    lda #$34
-    sta PPU_DATA
-    sta PPU_DATA
-    sta PPU_DATA
-    lda #$35
-    sta PPU_DATA
+    ; Draw the "Velocity" Indicator
+    VramColRow 10, 24, NAMETABLE_A
+    ldy #$30
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
+    VramColRow 10, 25, NAMETABLE_A
+    iny
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
+    VramColRow 10, 26, NAMETABLE_A
+    iny
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
+    iny
+    sty PPU_DATA
     ; Reset the VRAM so rendering occurs correctly
     VramReset
     rts
