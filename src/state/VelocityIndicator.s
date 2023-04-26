@@ -6,6 +6,9 @@
   ZERO_Y = 200  ; Range: [189]-[200]-[211]
 
   .proc init
+    .ifdef VIDEO_DEMO_MODE
+      rts
+    .endif
     ; Set up the indicator sprite and reset its position
     lda #ZERO_Y
     sta $208
@@ -19,6 +22,9 @@
   .endproc
 
   .proc update
+    .ifdef VIDEO_DEMO_MODE
+      rts
+    .endif
     ; Change the position of the "Velocity Indicator" sprite based on the
     ; current X and Y velocities (via the lookup tables below).
     lda Player::velocityY

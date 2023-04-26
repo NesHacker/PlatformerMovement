@@ -1,16 +1,13 @@
 ;-------------------------------------------------------------------------------
 ; [$20-$2F] Core Game State
 ;-------------------------------------------------------------------------------
-
 .scope Game
   ; Holds major flags for the game. Bit 7 indicates to the NMI handler that
-  ; state update are complete and the VRAM can be updated. Bits 0-6 are currently
-  ; unused.
+  ; state update are complete and the VRAM can be updated. Bits 0-6 are unused.
   flags = $20
 
   .proc init
     jsr init_palettes
-    jsr init_sprites
     jsr init_nametable
     rts
   .endproc
@@ -40,23 +37,17 @@
     .byte $0F, $0F, $0F, $0F
   .endproc
 
-  .proc init_sprites
-    NUM_SPRITES = 2
-    ldx #0
-  @loop:
-    lda initial_sprite_data, x
-    sta $200, x
-    inx
-    cpx #(4 * NUM_SPRITES)
-    bne @loop
+  .proc init_nametable
+    jsr draw_ground
+    .ifndef VIDEO_DEMO_MODE
+      jsr draw_button_indicator
+      jsr draw_velocity_indicator
+    .endif
+    VramReset
     rts
-  initial_sprite_data:
-    .byte 143, $80, %00000000, 120
-    .byte 143, $82, %00000000, 128
   .endproc
 
-  .proc init_nametable
-    ; Draw the ground platform
+  .proc draw_ground
     VramColRow 0, 20, NAMETABLE_A
     lda #$04
     jsr ppu_full_line
@@ -64,7 +55,10 @@
     jsr ppu_full_line
     lda #$06
     jsr ppu_full_line
-    ; Draw the press button indicators
+    rts
+  .endproc
+
+  .proc draw_button_indicator
     VramColRow 2, 24, NAMETABLE_A
     ldy #$20
     ldx #$7
@@ -81,7 +75,10 @@
     jsr ppu_fill_line
     lda #$28
     sta PPU_DATA
-    ; Draw the "Velocity" Indicator
+    rts
+  .endproc
+
+  .proc draw_velocity_indicator
     VramColRow 10, 24, NAMETABLE_A
     ldy #$30
     sty PPU_DATA
@@ -103,8 +100,6 @@
     sty PPU_DATA
     iny
     sty PPU_DATA
-    ; Reset the VRAM so rendering occurs correctly
-    VramReset
     rts
   .endproc
 .endscope

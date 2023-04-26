@@ -59,6 +59,10 @@
 ;-------------------------------------------------------------------------------
 .segment "CODE"
 
+; Uncomment this line to enable "video demo" mode, which I used to record the
+; demo gameplay for the video.
+; VIDEO_DEMO_MODE = 1
+
 ; Library Includes
 .include "lib/ppu.s"
 
@@ -169,7 +173,10 @@ loop:
   ; Initialize the game state
   jsr Game::init
   jsr Player::init
-  jsr VelocityIndicator::init
+
+  .ifndef VIDEO_DEMO_MODE
+    jsr VelocityIndicator::init
+  .endif
 
   ; Enable rendering and NMI
   lda #%10110000
@@ -186,7 +193,9 @@ loop:
   jsr Joypad::update
   jsr Player::Movement::update
   jsr Player::Sprite::update
-  jsr VelocityIndicator::update
+  .ifndef VIDEO_DEMO_MODE
+    jsr VelocityIndicator::update
+  .endif
   rts
 .endproc
 
@@ -195,19 +204,21 @@ loop:
 ;-------------------------------------------------------------------------------
 .proc render_loop
   ; Update the binary button indicator tiles
-  VramColRow 2, 25, NAMETABLE_A
-  lda Joypad::downTiles
-  sta PPU_DATA
-  lda Joypad::downTiles + 1
-  sta PPU_DATA
-  lda Joypad::downTiles + 4
-  sta PPU_DATA
-  lda Joypad::downTiles + 5
-  sta PPU_DATA
-  lda Joypad::downTiles + 6
-  sta PPU_DATA
-  lda Joypad::downTiles + 7
-  sta PPU_DATA
+  .ifndef VIDEO_DEMO_MODE
+    VramColRow 2, 25, NAMETABLE_A
+    lda Joypad::downTiles
+    sta PPU_DATA
+    lda Joypad::downTiles + 1
+    sta PPU_DATA
+    lda Joypad::downTiles + 4
+    sta PPU_DATA
+    lda Joypad::downTiles + 5
+    sta PPU_DATA
+    lda Joypad::downTiles + 6
+    sta PPU_DATA
+    lda Joypad::downTiles + 7
+    sta PPU_DATA
+  .endif
 
   ; Transfer Sprites via OAM
   lda #$00

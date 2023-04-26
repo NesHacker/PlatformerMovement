@@ -18,6 +18,17 @@
   idleState         = $3D   ; See `.enum IdleState`, below...
   idleTimer         = $3E
 
+  .scope Initial
+    spriteX = 48
+    velocityX = 0
+    positionX_LO = $00
+    positionX_HI = $03
+    spriteY = 143
+    velocityY = 0
+    positionY_LO = $F0
+    positionY_HI = $08
+  .endscope
+
   .enum Heading
     Right = 0
     Left = 1
@@ -46,35 +57,54 @@
   .proc init
     jsr init_x
     jsr init_y
+    jsr init_sprites
   .endproc
 
   .proc init_x
     ; Set the initial x-position to 48 ($0300 in 12.4 fixed point)
-    lda #48
+    lda #Initial::spriteX
     sta spriteX
-    lda #$00
+    lda #Initial::positionX_LO
     sta positionX
-    lda #$03
+    lda #Initial::positionX_HI
     sta positionX + 1
     ; Initialize the velocity and target velocity
-    lda #0
+    lda Initial::velocityX
     sta targetVelocityX
     sta velocityX
     rts
   .endproc
 
   .proc init_y
-    ; Set the initial y-position to 143 ($08F0 in 12.4 fixed point)
-    lda #Jump::FloorHeight
+    ; Set the initial y-position
+    lda #Initial::spriteY
     sta spriteY
-    lda #$F0
+    lda #Initial::positionY_LO
     sta positionY
-    lda #$08
+    lda #Initial::positionY_HI
     sta positionY + 1
     ; Initialize the velocity and target velocity
-    lda #0
+    lda #Initial::velocityY
     sta velocityY
     rts
+  .endproc
+
+  .proc init_sprites
+    NUM_SPRITES = 2
+    LEFT_TILE = $80
+    RIGHT_TILE = $82
+    ATTRS = %00000000
+    ldx #0
+  @loop:
+    lda initial_sprite_data, x
+    sta $200, x
+    inx
+    cpx #(4 * NUM_SPRITES)
+    bne @loop
+    rts
+  initial_sprite_data:
+    .byte Initial::spriteY, LEFT_TILE, ATTRS, Initial::spriteX
+    .byte Initial::spriteY, RIGHT_TILE, ATTRS, Initial::spriteX + 8
   .endproc
 
   .scope Movement
