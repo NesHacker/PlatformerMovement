@@ -63,6 +63,10 @@
 ; demo gameplay for the video.
 ; VIDEO_DEMO_MODE = 1
 
+; Uncomment this line to enable "bad acceleration" mode. This was used in for
+; the demonstration in the video.
+; BAD_ACCELERATION_MODE = 1
+
 ; Library Includes
 .include "lib/ppu.s"
 
@@ -71,6 +75,7 @@
 .include "state/Joypad.s"
 .include "state/Player.s"
 .include "state/VelocityIndicator.s"
+.include "state/BadAcceleration.s"
 
 ;-------------------------------------------------------------------------------
 ; Core reset method for the game, this is called on powerup and when the system
@@ -172,7 +177,12 @@ loop:
 .proc init_game
   ; Initialize the game state
   jsr Game::init
-  jsr Player::init
+
+  .ifndef BAD_ACCELERATION_MODE
+    jsr Player::init
+  .else
+    jsr BadAcceleration::init
+  .endif
 
   .ifndef VIDEO_DEMO_MODE
     jsr VelocityIndicator::init
@@ -191,8 +201,14 @@ loop:
 ;-------------------------------------------------------------------------------
 .proc game_loop
   jsr Joypad::update
-  jsr Player::Movement::update
-  jsr Player::Sprite::update
+
+  .ifndef BAD_ACCELERATION_MODE
+    jsr Player::Movement::update
+    jsr Player::Sprite::update
+  .else
+    jsr BadAcceleration::update
+  .endif
+
   .ifndef VIDEO_DEMO_MODE
     jsr VelocityIndicator::update
   .endif
