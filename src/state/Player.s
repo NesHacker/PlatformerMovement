@@ -430,6 +430,8 @@
     @airborne:
       rts
     @grounded:
+      ; If spriteX == 0: STILL    // Left bound animation fix
+      ; If spriteX == MAX: STILL  // Right bound animation fix
       ; If T = V:
       ;   // Steady motion
       ;   If T == 0: STILL
@@ -440,6 +442,10 @@
       ;     If T > 0 && V < 0: PIVOT
       ;     If T < 0 && V > 0: PIVOT
       ;   Else: WALK
+      lda spriteX
+      beq @still
+      cmp #$EF
+      beq @still
       lda targetVelocityX
       cmp velocityX
       bne @accelerating
