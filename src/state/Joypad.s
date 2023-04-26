@@ -42,7 +42,9 @@ BUTTON_RIGHT  = 1 << 0
 
   .proc update
     jsr read_joypad1
-    jsr compute_button_tiles
+    .ifndef VIDEO_DEMO_MODE
+      jsr compute_button_tiles
+    .endif
     rts
   .endproc
 
