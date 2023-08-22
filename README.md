@@ -1,4 +1,4 @@
-# Plarformer Movement
+# Platformer Movement
 An SMB3 inspired movement and controls demo.
 
 ## Contributing
