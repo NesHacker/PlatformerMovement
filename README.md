@@ -28,6 +28,13 @@ then have at it.
    simple as `sudo apt-get install cc65`.
 2. Run `make` from the project root to build the ROM.
 
+#### VS Code Dev Linux Container (from any host OS)
+1. Install/configure [Docker](https://www.docker.com/get-started/)
+2. Install [VS Code](https://code.visualstudio.com/)
+3. Open `Platformer Movement` repo folder in VS Code
+4. Install the Dev Containers extension when prompted (If not already present).
+5. Ctrl-P and select _Dev Containers: Rebuild and Reopen in Container_
+
 ### Code Style
 One of the biggest points of this project is to act as a reference so that folks
 can follow along with the code and learn. As such, keeping the code nice and
