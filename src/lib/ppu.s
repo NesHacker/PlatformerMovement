@@ -222,3 +222,23 @@ PALETTE     = $3f00
   bne @loop
   rts
 .endproc
+
+.proc clear_nametable_and_attr
+  ldy #4
+  lda #0
+: ldx #0
+: sta PPU_DATA
+  inx
+  bne :-
+  dey
+  bne :--
+  rts
+.endproc
+
+.proc clear_screen
+  Vram NAMETABLE_A
+  jsr clear_nametable_and_attr
+  Vram NAMETABLE_C
+  jsr clear_nametable_and_attr
+  rts
+.endproc

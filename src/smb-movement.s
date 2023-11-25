@@ -103,6 +103,7 @@
   sta $700, x
   inx
   bne @ram_reset_loop
+  jsr clear_screen
   lda #%11101111
 @sprite_reset_loop:
   sta $200, x
